@@ -1,8 +1,8 @@
 import { StrictMode, useEffect } from "react";
-import { Container, Navbar } from "react-bootstrap";
-import { api, modelAtom } from "../atoms";
+import { Button, Container, Navbar, Offcanvas } from "react-bootstrap";
+import { api, modelAtom, sidebarAtom } from "../atoms";
 import Editor from "./Editor";
-import { useSetAtom } from "jotai";
+import { useAtom, useSetAtom } from "jotai";
 import Sidebar from "./Sidebar";
 import styled, { createGlobalStyle } from "styled-components";
 import Metadata from "./Metadata";
@@ -27,28 +27,38 @@ const GlobalStyle = createGlobalStyle`
 
 const Wrapper = styled.div`
   flex: 1 0 200px;
-  width: 1440px;
-  margin: 0 auto;
 
   display: flex;
   position: relative;
   overflow: hidden;
-  padding: 2rem;
-  gap: 4rem;
+`;
+
+const Header = styled.header`
+  background-color: #f0f0f0;
 `;
 
 const Footer = styled.footer`
   height: 64px;
-  width: 100%;
-  text-align: center;
-  padding: 10px;
-  background-color: #f8f9fa;
+  display: grid;
+  place-items: center;
+  background-color: #f0f0f0;
+
+  & p {
+    margin: 0;
+  }
 `;
 
-const Main = styled.main`
-  flex: 1 0 800px;
+const Aside = styled(Offcanvas)`
+  width: 320px;
+  padding: 1rem;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  border-right: 1px solid #e0e0e0;
+`;
+
+const Main = styled(Container)`
+  padding: 1rem;
   overflow: scroll;
-  padding: 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -56,6 +66,10 @@ const Main = styled.main`
 
 export default function App() {
   const setModel = useSetAtom(modelAtom);
+  const [show, setShow] = useAtom(sidebarAtom);
+
+  const handleClose = () => setShow(false);
+  const handleShow = () => setShow(true);
 
   useEffect(() => {
     api.initialize().then((model) => {
@@ -66,15 +80,25 @@ export default function App() {
   return (
     <StrictMode>
       <GlobalStyle />
-      <header>
+      <Header>
         <Navbar>
           <Container fluid>
             <Navbar.Brand>生如夏花内容管理系统</Navbar.Brand>
+            <Button className="d-lg-none" onClick={handleShow}>
+              目录
+            </Button>
           </Container>
         </Navbar>
-      </header>
+      </Header>
       <Wrapper>
-        <Sidebar />
+        <Aside show={show} onHide={handleClose} responsive="lg">
+          <Offcanvas.Header closeButton>
+            <Offcanvas.Title>目录</Offcanvas.Title>
+          </Offcanvas.Header>
+          <Offcanvas.Body>
+            <Sidebar />
+          </Offcanvas.Body>
+        </Aside>
         <Main>
           <Metadata />
           <Editor />

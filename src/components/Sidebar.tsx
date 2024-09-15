@@ -1,6 +1,6 @@
 import styled from "styled-components";
-import { modelAtom, pathAtom, TreeNode } from "../atoms";
-import { useAtom, useAtomValue } from "jotai";
+import { api, modelAtom, pathAtom, sidebarAtom, TreeNode } from "../atoms";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 
 const TreeList = styled.ul`
   padding: 0;
@@ -14,24 +14,24 @@ const TreeList = styled.ul`
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border-radius: 4px;
     gap: 1rem;
+    cursor: pointer;
+
+    &:hover {
+      background-color: #f0f0f0;
+    }
+
+    &.active {
+      background-color: #f0f0f0;
+    }
   }
 `;
 
 const Item = styled.p`
   flex: 1;
-  border-radius: 4px;
   margin: 0;
-  padding: 4px;
-  cursor: pointer;
-
-  &:hover {
-    background-color: #f0f0f0;
-  }
-
-  &.active {
-    background-color: #e0e0e0;
-  }
+  padding: 4px 8px;
 `;
 
 const ExpandButton = styled.button`
@@ -45,30 +45,62 @@ const ExpandButton = styled.button`
   min-height: 2rem;
 
   &:hover {
-    background-color: #f0f0f0;
+    background-color: #e0e0e0;
   }
 `;
 
-function SidebarItem({ node, parent }: { node: TreeNode; parent: string[] }) {
+function SidebarItem({
+  node,
+  parent,
+  index,
+}: {
+  node: TreeNode;
+  parent: string[];
+  index: number;
+}) {
   const path = parent.concat([node.name]);
   const [currentPath, setPath] = useAtom(pathAtom);
+  const [show, setShow] = useAtom(sidebarAtom);
+  const setModel = useSetAtom(modelAtom);
+  const hasChildren =
+    node.children.length > 0 || node.unknown_children.length > 0;
   return (
     <li>
-      <div>
-        <Item
-          className={path.join("/") === currentPath.join("/") ? "active" : ""}
-          onClick={() => setPath(path)}
-        >
-          {node.title}
-        </Item>
-        {node.unknown_children.length > 0 && (
-          <ExpandButton>{node.expanded ? "-" : "+"}</ExpandButton>
+      <div
+        className={path.join("/") === currentPath.join("/") ? "active" : ""}
+        onClick={() => {
+          setPath(path);
+          if (show) setShow(false);
+        }}
+      >
+        <Item>{node.title}</Item>
+        {hasChildren && (
+          <ExpandButton
+            onClick={async (e) => {
+              e.stopPropagation();
+              const newNode = { ...node, expanded: !node.expanded };
+              if (newNode.expanded && newNode.unknown_children.length > 0) {
+                newNode.children = await api.createModel(
+                  newNode.unknown_children
+                );
+                newNode.unknown_children = [];
+              }
+              setModel((draft) => draft.set(parent, index, newNode));
+            }}
+          >
+            {node.expanded ? <span>&minus;</span> : <span>+</span>}
+          </ExpandButton>
         )}
       </div>
-      {node.children.length > 0 && (
+      {node.children.length > 0 && node.expanded && (
         <TreeList>
-          {node.children.map((child) => (
-            <SidebarItem key={child.name} node={child} parent={path} />
+          {node.children.map((child, index) => (
+            <SidebarItem
+              key={child.name}
+              node={child}
+              parent={path}
+              index={index}
+            />
           ))}
         </TreeList>
       )}
@@ -76,24 +108,23 @@ function SidebarItem({ node, parent }: { node: TreeNode; parent: string[] }) {
   );
 }
 
-const Aside = styled.aside`
-  flex: 0 0 240px;
-  overflow-y: scroll;
-  overflow-x: hidden;
-`;
-
 export default function Sidebar() {
   const model = useAtomValue(modelAtom);
 
   return (
-    <Aside>
+    <aside style={{ width: "100%" }}>
       <nav>
         <TreeList>
-          {model.map((node) => (
-            <SidebarItem key={node.name} node={node} parent={[]} />
+          {model.data.map((node, index) => (
+            <SidebarItem
+              key={node.name}
+              node={node}
+              parent={[]}
+              index={index}
+            />
           ))}
         </TreeList>
       </nav>
-    </Aside>
+    </aside>
   );
 }

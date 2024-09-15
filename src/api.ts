@@ -1,5 +1,5 @@
 import { Octokit } from "@octokit/rest";
-import { MetadataNode, Model } from "./atoms";
+import { MetadataNode, Model, TreeNode } from "./atoms";
 import matter from "gray-matter";
 
 // const TOPICS = {
@@ -49,44 +49,61 @@ export default class API {
       if (path.startsWith("docs/") && path.endsWith(".mdx")) {
         const pathList = path.split("/").slice(1);
         if (pathList.length < 2) continue;
+        const basename = pathList.pop()!;
+        if (basename !== "index.mdx") {
+          pathList.push(basename.replace(/\.mdx$/, ""));
+        }
         files.push({ path: pathList, sha });
       }
     }
 
-    return await this.createModel(files);
+    const nodes = await this.createModel(files, true);
+    return new Model(nodes);
   }
 
-  async createModel(files: MetadataNode[]) {
-    const model = new Model();
+  async createModel(files: MetadataNode[], topLevel: boolean = false) {
+    const nodes: TreeNode[] = [];
     const descendants: MetadataNode[] = [];
+    const order = new Map<string, number>();
+    const futures: Promise<void>[] = [];
     // 第一遍找到所有根节点
     for (const { path, sha } of files) {
-      if (path.length === 2 && path.at(-1)! === "index.mdx") {
-        const { title, content } = await this.getFileWithSHA(sha);
-        model.push({
-          name: path[0],
-          title,
-          sha,
-          content,
-          expanded: false,
-          unknown_children: [],
-          children: [],
-        });
+      if (path.length === 1) {
+        const future = this.getFileWithSHA(sha).then(
+          ({ title, sidebar_position, content }) => {
+            nodes.push({
+              name: path[0],
+              title,
+              sha,
+              content,
+              expanded: false,
+              unknown_children: [],
+              children: [],
+            });
+            order.set(path[0], sidebar_position);
+          }
+        );
+        futures.push(future);
       } else {
         descendants.push({ path, sha });
       }
     }
-    model.sort((a, b) => TOPICS.indexOf(a.name) - TOPICS.indexOf(b.name));
+    await Promise.all(futures);
+    if (topLevel) {
+      nodes.sort((a, b) => TOPICS.indexOf(a.name) - TOPICS.indexOf(b.name));
+    } else {
+      nodes.sort((a, b) => (order.get(a.name) ?? 0) - (order.get(b.name) ?? 0));
+    }
     // 第二遍找到所有子节点，并且归类放置到根节点下
     for (const { path, sha } of descendants) {
-      const root = model.find((node) => node.name === path[0]!);
+      const root = nodes.find((node) => node.name === path[0]!);
       if (!root) continue;
       root.unknown_children.push({
         path: path.slice(1),
         sha,
       });
     }
-    return model;
+    return nodes;
   }
 
   async getFileWithSHA(sha: string) {
@@ -100,8 +117,8 @@ export default class API {
     const text = decoder.decode(bin);
     const { data, content } = matter(text);
     return {
-      title: data.title ?? "无标题",
-      sidebar_position: data.sidebar_position ?? 0,
+      title: (data.title as string) ?? "无标题",
+      sidebar_position: (data.sidebar_position as number) ?? 0,
       content,
     };
   }
