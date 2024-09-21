@@ -1,109 +1,103 @@
 import { Octokit } from "@octokit/rest";
-import { MetadataNode, Model, TreeNode } from "./atoms";
+import { mainBranch, MetadataNode, Model, TreeNode } from "./atoms";
 import matter from "gray-matter";
-
-// const TOPICS = {
-//   general: "基础",
-//   nipple: "乳首",
-//   prostate: "前列腺",
-//   penis: "阴茎",
-//   hypnosis: "催眠",
-//   squirting: "潮吹",
-// };
-
-const TOPICS = [
-  "general",
-  "nipple",
-  "prostate",
-  "penis",
-  "hypnosis",
-  "squirting",
-];
 
 const base = {
   owner: "viva-la-vita",
   repo: "wiki2",
 };
 
+const decode = (base64: string) => {
+  const binString = atob(base64);
+  const bin = Uint8Array.from(binString, (m) => m.codePointAt(0)!);
+  const decoder = new TextDecoder();
+  return decoder.decode(bin);
+};
+
 export default class API {
   private octokit: Octokit;
   private rest: Octokit["rest"];
+  public ready: boolean = false;
 
-  constructor() {
+  constructor(token: string) {
     this.octokit = new Octokit({
-      auth: import.meta.env.PAT,
+      auth: token,
     });
     this.rest = this.octokit.rest;
+    this.ready = token !== "";
   }
 
-  async initialize() {
-    const { data } = await this.rest.git.getTree({
+  async getBranches() {
+    const { data } = await this.rest.repos.listBranches({
       ...base,
-      tree_sha: "main",
-      recursive: "true",
     });
-    const files: MetadataNode[] = [];
-    for (const { type, path, sha } of data.tree) {
-      if (type !== "blob") continue;
-      if (!path || !sha) continue;
-      if (path.startsWith("docs/") && path.endsWith(".mdx")) {
-        const pathList = path.split("/").slice(1);
-        if (pathList.length < 2) continue;
-        const basename = pathList.pop()!;
-        if (basename !== "index.mdx") {
-          pathList.push(basename.replace(/\.mdx$/, ""));
-        }
-        files.push({ path: pathList, sha });
-      }
-    }
+    return data.map((x) => x.name);
+  }
 
-    const nodes = await this.createModel(files, true);
+  async createBranch(name: string) {
+    const { data } = await this.rest.repos.getBranch({
+      ...base,
+      branch: mainBranch,
+    });
+    const sha = data.commit.sha;
+    await this.rest.git.createRef({
+      ...base,
+      ref: `refs/heads/${name}`,
+      sha,
+    });
+  }
+
+  async initialize(branch: string) {
+    const { data } = await this.rest.repos.getContent({
+      ...base,
+      ref: branch,
+      path: "sidebars.json",
+    });
+    if (!("type" in data && data.type === "file")) throw new Error();
+    const content: MetadataNode[] = JSON.parse(decode(data.content));
+    const nodes = await this.expand(content, []);
     return new Model(nodes);
   }
 
-  async createModel(files: MetadataNode[], topLevel: boolean = false) {
-    const nodes: TreeNode[] = [];
-    const descendants: MetadataNode[] = [];
-    const order = new Map<string, number>();
-    const futures: Promise<void>[] = [];
-    // 第一遍找到所有根节点
-    for (const { path, sha } of files) {
-      if (path.length === 1) {
-        const future = this.getFileWithSHA(sha).then(
-          ({ title, sidebar_position, content }) => {
-            nodes.push({
-              name: path[0],
-              title,
-              sha,
-              content,
-              expanded: false,
-              unknown_children: [],
-              children: [],
-            });
-            order.set(path[0], sidebar_position);
-          }
-        );
-        futures.push(future);
-      } else {
-        descendants.push({ path, sha });
-      }
-    }
-    await Promise.all(futures);
-    if (topLevel) {
-      nodes.sort((a, b) => TOPICS.indexOf(a.name) - TOPICS.indexOf(b.name));
-    } else {
-      nodes.sort((a, b) => (order.get(a.name) ?? 0) - (order.get(b.name) ?? 0));
-    }
-    // 第二遍找到所有子节点，并且归类放置到根节点下
-    for (const { path, sha } of descendants) {
-      const root = nodes.find((node) => node.name === path[0]!);
-      if (!root) continue;
-      root.unknown_children.push({
-        path: path.slice(1),
-        sha,
+  async expand(files: (MetadataNode | string)[], parentPath: string[]) {
+    const map = new Map<number, TreeNode>();
+    const futures = files.map((x, index) => {
+      const { name, items } =
+        typeof x === "string" ? { name: x, items: [] } : x;
+      const basename =
+        typeof x === "string" ? `${name}.mdx` : `${name}/index.mdx`;
+      const path = ["docs", ...parentPath, basename].join("/");
+      return this.getFileWithPath(path).then(({ title, content }) => {
+        map.set(index, {
+          name,
+          title,
+          content,
+          expanded: false,
+          unknown_items: items,
+          items: [],
+        });
       });
-    }
-    return nodes;
+    });
+    await Promise.all(futures);
+    return files.map((_, index) => map.get(index)!);
+  }
+
+  async parseFile(base64: string) {
+    const text = decode(base64);
+    const { data, content } = matter(text);
+    return {
+      title: (data.title as string) ?? "无标题",
+      content,
+    };
+  }
+
+  async getFileWithPath(path: string) {
+    const res = await this.rest.repos.getContent({
+      ...base,
+      path,
+    });
+    if (!("type" in res.data && res.data.type === "file")) throw new Error();
+    return this.parseFile(res.data.content);
   }
 
   async getFileWithSHA(sha: string) {
@@ -111,15 +105,6 @@ export default class API {
       ...base,
       file_sha: sha,
     });
-    const binString = atob(res.data.content);
-    const bin = Uint8Array.from(binString, (m) => m.codePointAt(0)!);
-    const decoder = new TextDecoder();
-    const text = decoder.decode(bin);
-    const { data, content } = matter(text);
-    return {
-      title: (data.title as string) ?? "无标题",
-      sidebar_position: (data.sidebar_position as number) ?? 0,
-      content,
-    };
+    return this.parseFile(res.data.content);
   }
 }

@@ -3,10 +3,11 @@ import "vditor/dist/index.css";
 
 import { useEffect, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
-import { modelAtom, pathAtom } from "../atoms";
+import { branchAtom, modelAtom, pathAtom } from "../atoms";
 
 export default function Editor() {
   const [vd, setVd] = useState<Vditor>();
+  const branch = useAtomValue(branchAtom);
   const path = useAtomValue(pathAtom);
   const model = useAtomValue(modelAtom);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -29,7 +30,7 @@ export default function Editor() {
     const useOutline = document.body.clientWidth > 992;
     if (!editorRef.current) return;
     const welcomeText =
-      "欢迎使用生如夏花内容管理系统。\n\n您可以在目录中选择一个文档进行编辑。点击「+」展开子目录，点击「-」折叠子目录。";
+      "欢迎使用生如夏花内容管理系统。\n\n您可以在目录中选择一个文档进行编辑。点击 ` + ` 展开子目录，点击 ` \u2212 ` 折叠子目录。";
     const vditor = new Vditor(editorRef.current, {
       after: () => {
         vditor.setValue(welcomeText);

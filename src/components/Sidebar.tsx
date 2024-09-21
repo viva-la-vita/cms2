@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import { api, modelAtom, pathAtom, sidebarAtom, TreeNode } from "../atoms";
+import { apiAtom, modelAtom, pathAtom, sidebarAtom, TreeNode } from "../atoms";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 
 const TreeList = styled.ul`
@@ -58,12 +58,12 @@ function SidebarItem({
   parent: string[];
   index: number;
 }) {
+  const api = useAtomValue(apiAtom);
   const path = parent.concat([node.name]);
   const [currentPath, setPath] = useAtom(pathAtom);
   const [show, setShow] = useAtom(sidebarAtom);
   const setModel = useSetAtom(modelAtom);
-  const hasChildren =
-    node.children.length > 0 || node.unknown_children.length > 0;
+  const hasChildren = node.items.length > 0 || node.unknown_items.length > 0;
   return (
     <li>
       <div
@@ -79,11 +79,9 @@ function SidebarItem({
             onClick={async (e) => {
               e.stopPropagation();
               const newNode = { ...node, expanded: !node.expanded };
-              if (newNode.expanded && newNode.unknown_children.length > 0) {
-                newNode.children = await api.createModel(
-                  newNode.unknown_children
-                );
-                newNode.unknown_children = [];
+              if (newNode.expanded && newNode.unknown_items.length > 0) {
+                newNode.items = await api.expand(newNode.unknown_items, path);
+                newNode.unknown_items = [];
               }
               setModel((draft) => draft.set(parent, index, newNode));
             }}
@@ -92,9 +90,9 @@ function SidebarItem({
           </ExpandButton>
         )}
       </div>
-      {node.children.length > 0 && node.expanded && (
+      {node.items.length > 0 && node.expanded && (
         <TreeList>
-          {node.children.map((child, index) => (
+          {node.items.map((child, index) => (
             <SidebarItem
               key={child.name}
               node={child}

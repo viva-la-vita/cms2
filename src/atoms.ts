@@ -3,26 +3,34 @@ import API from "./api";
 import { Buffer } from "buffer";
 import { atomWithImmer } from "jotai-immer";
 import { immerable } from "immer";
+import { atomWithStorage } from "jotai/utils";
 
 window.Buffer = window.Buffer || Buffer;
+
+export const tokenAtom = atomWithStorage("token", localStorage.getItem("token") ?? "");
+
+export const userAtom = atomWithStorage("user", localStorage.getItem("user") ?? "");
+
+export const mainBranch = "main";
+
+export const branchAtom = atom(mainBranch);
 
 export const pathAtom = atom<string[]>([]);
 
 export const sidebarAtom = atom(false);
 
 export interface MetadataNode {
-  path: string[];
-  sha: string;
+  name: string;
+  items: (MetadataNode | string)[];
 }
 
 export interface TreeNode {
   name: string;
   title: string;
-  sha: string;
   content: string;
   expanded: boolean;
-  unknown_children: MetadataNode[];
-  children: TreeNode[];
+  unknown_items: (MetadataNode | string)[];
+  items: TreeNode[];
 }
 
 export class Model {
@@ -39,7 +47,7 @@ export class Model {
     for (const name of path) {
       node = pointer.find((child) => child.name === name);
       if (!node) return;
-      pointer = node.children;
+      pointer = node.items;
     }
     return node;
   }
@@ -49,7 +57,7 @@ export class Model {
     for (const name of path) {
       const child = pointer.find((child) => child.name === name);
       if (!child) return;
-      pointer = child.children;
+      pointer = child.items;
     }
     pointer[index] = node;
   }
@@ -57,4 +65,4 @@ export class Model {
 
 export const modelAtom = atomWithImmer<Model>(new Model());
 
-export const api = new API();
+export const apiAtom = atom((get) => new API(get(tokenAtom)));

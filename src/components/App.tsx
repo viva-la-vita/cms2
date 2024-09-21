@@ -1,29 +1,29 @@
-import { StrictMode, useEffect } from "react";
-import { Button, Container, Navbar, Offcanvas } from "react-bootstrap";
-import { api, modelAtom, sidebarAtom } from "../atoms";
+import { useEffect, useState } from "react";
+import {
+  Button,
+  Container,
+  Dropdown,
+  DropdownButton,
+  Navbar,
+  Offcanvas,
+  Spinner,
+} from "react-bootstrap";
+import {
+  apiAtom,
+  branchAtom,
+  mainBranch,
+  modelAtom,
+  sidebarAtom,
+  tokenAtom,
+  userAtom,
+} from "../atoms";
 import Editor from "./Editor";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import Sidebar from "./Sidebar";
-import styled, { createGlobalStyle } from "styled-components";
+import styled from "styled-components";
 import Metadata from "./Metadata";
-
-const GlobalStyle = createGlobalStyle`
-  html, body {
-    height: 100%;
-  }
-
-  #root {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-
-  header {
-    position: sticky;
-    top: 0;
-    background-color: white;
-  }
-`;
+import Login from "./Login";
+import { RESET } from "jotai/utils";
 
 const Wrapper = styled.div`
   flex: 1 0 200px;
@@ -35,6 +35,10 @@ const Wrapper = styled.div`
 
 const Header = styled.header`
   background-color: #f0f0f0;
+  position: sticky;
+  top: 0;
+  background-color: white;
+  z-index: 1;
 `;
 
 const Footer = styled.footer`
@@ -64,29 +68,91 @@ const Main = styled(Container)`
   gap: 1rem;
 `;
 
-export default function App() {
+function CMS() {
+  const api = useAtomValue(apiAtom);
   const setModel = useSetAtom(modelAtom);
   const [show, setShow] = useAtom(sidebarAtom);
+  const [user, setUser] = useAtom(userAtom);
+  const setToken = useSetAtom(tokenAtom);
+  const [hasUserBranch, setHasUserBranch] = useState(false);
+  const [branchLoading, setBranchLoading] = useState(false);
+  const [branch, setBranch] = useAtom(branchAtom);
 
   const handleClose = () => setShow(false);
   const handleShow = () => setShow(true);
 
   useEffect(() => {
-    api.initialize().then((model) => {
+    if (!api.ready) return;
+    api.initialize(branch).then((model) => {
       setModel(model);
     });
-  }, [setModel]);
+  }, [setModel, api, branch]);
+
+  useEffect(() => {
+    if (!api.ready) return;
+    api.getBranches().then((branches) => {
+      const hasUserBranch = branches.includes(user);
+      setHasUserBranch(hasUserBranch);
+      if (hasUserBranch) setBranch(user);
+    });
+  }, [user, api, setBranch]);
+
+  if (!api.ready) return <Spinner />;
 
   return (
-    <StrictMode>
-      <GlobalStyle />
+    <>
       <Header>
         <Navbar>
           <Container fluid>
-            <Navbar.Brand>生如夏花内容管理系统</Navbar.Brand>
+            <Navbar.Brand>
+              <img
+                src="https://viva-la-vita.org/favicon.ico"
+                width="32"
+                alt="logo"
+              />
+            </Navbar.Brand>
             <Button className="d-lg-none" onClick={handleShow}>
               目录
             </Button>
+            <Navbar.Collapse
+              className="justify-content-end"
+              style={{ gap: 16 }}
+            >
+              <DropdownButton
+                title={`版本：${branch === mainBranch ? "主线" : "分支"}`}
+              >
+                <Dropdown.Item onClick={() => setBranch(mainBranch)}>
+                  主线
+                </Dropdown.Item>
+                {hasUserBranch ? (
+                  <Dropdown.Item onClick={() => setBranch(user)}>
+                    分支
+                  </Dropdown.Item>
+                ) : (
+                  <Dropdown.Item
+                    onClick={() => {
+                      setBranchLoading(true);
+                      api.createBranch(user).then(() => {
+                        setBranch(user);
+                        setHasUserBranch(true);
+                        setBranchLoading(false);
+                      });
+                    }}
+                  >
+                    {branchLoading ? <Spinner /> : "（创建分支）"}
+                  </Dropdown.Item>
+                )}
+              </DropdownButton>
+              <Button
+                onClick={() => {
+                  setUser(RESET);
+                  setToken(RESET);
+                  window.location.reload();
+                }}
+              >
+                登出
+              </Button>
+            </Navbar.Collapse>
           </Container>
         </Navbar>
       </Header>
@@ -107,6 +173,15 @@ export default function App() {
       <Footer>
         <p>© 2019 ~ {new Date().getFullYear()} 生如夏花创作者</p>
       </Footer>
-    </StrictMode>
+    </>
   );
+}
+
+export default function App() {
+  const token = useAtomValue(tokenAtom);
+  const user = useAtomValue(userAtom);
+  if (!token || !user) {
+    return <Login />;
+  }
+  return <CMS />;
 }

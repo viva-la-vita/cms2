@@ -37,6 +37,7 @@ export default function Metadata() {
                 type="text"
                 placeholder="只能使用小写字母 (a-z) 或连字符 (-)"
                 value={node.name}
+                readOnly
               />
             </InputGroup>
           </Col>
