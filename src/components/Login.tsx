@@ -1,12 +1,7 @@
-import { useSetAtom } from "jotai";
 import { Button, Form } from "react-bootstrap";
-import { tokenAtom, userAtom } from "../atoms";
 import { useState } from "react";
 
 export default function Login() {
-  const setUser = useSetAtom(userAtom);
-  const setToken = useSetAtom(tokenAtom);
-
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   return (
@@ -15,8 +10,9 @@ export default function Login() {
         style={{ width: 320 }}
         onSubmit={(e) => {
           e.preventDefault();
-          setUser(username);
-          setToken(password);
+          localStorage.setItem("user", username);
+          localStorage.setItem("token", password);
+          window.location.reload();
         }}
       >
         <h2>生如夏花账号登录</h2>

@@ -2,14 +2,21 @@ import Vditor from "vditor";
 import "vditor/dist/index.css";
 
 import { useEffect, useRef, useState } from "react";
-import { useAtomValue } from "jotai";
-import { branchAtom, modelAtom, pathAtom } from "../atoms";
+import { useAtom, useAtomValue } from "jotai";
+import {
+  branchAtom,
+  draftAtom,
+  mainBranch,
+  modelAtom,
+  pathAtom,
+} from "../atoms";
 
 export default function Editor() {
   const [vd, setVd] = useState<Vditor>();
   const branch = useAtomValue(branchAtom);
-  const path = useAtomValue(pathAtom);
   const model = useAtomValue(modelAtom);
+  const path = useAtomValue(pathAtom);
+  const [draft, setDraft] = useAtom(draftAtom);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const deduction = 240;
@@ -35,6 +42,11 @@ export default function Editor() {
       after: () => {
         vditor.setValue(welcomeText);
         setVd(vditor);
+      },
+      input: (content) => {
+        if (!draft) return;
+        console.log(content);
+        setDraft({ ...draft, content });
       },
       toolbar: [
         "headings",
@@ -73,6 +85,7 @@ export default function Editor() {
         type: "text",
       },
     });
+    setVd(vditor);
     return () => {
       vd?.destroy();
       setVd(undefined);
@@ -80,15 +93,15 @@ export default function Editor() {
   }, []);
 
   useEffect(() => {
-    if (!vd) {
-      return;
-    }
     const node = model.get(path);
-    if (!node) {
-      return;
+    if (!node) return;
+    vd?.setValue(node.content);
+    if (branch === mainBranch) {
+      vd?.disabled();
+    } else {
+      vd?.enable();
     }
-    vd.setValue(node.content);
-  });
+  }, [model, path, vd, branch]);
 
   return <div ref={editorRef} />;
 }

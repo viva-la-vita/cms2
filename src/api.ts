@@ -1,5 +1,5 @@
 import { Octokit } from "@octokit/rest";
-import { mainBranch, MetadataNode, Model, TreeNode } from "./atoms";
+import { Draft, mainBranch, MetadataNode, Model, TreeNode } from "./atoms";
 import matter from "gray-matter";
 
 const base = {
@@ -17,14 +17,14 @@ const decode = (base64: string) => {
 export default class API {
   private octokit: Octokit;
   private rest: Octokit["rest"];
-  public ready: boolean = false;
+  private user: string;
 
-  constructor(token: string) {
+  constructor(token: string, user: string) {
+    this.user = user;
     this.octokit = new Octokit({
       auth: token,
     });
     this.rest = this.octokit.rest;
-    this.ready = token !== "";
   }
 
   async getBranches() {
@@ -55,11 +55,11 @@ export default class API {
     });
     if (!("type" in data && data.type === "file")) throw new Error();
     const content: MetadataNode[] = JSON.parse(decode(data.content));
-    const nodes = await this.expand(content, []);
+    const nodes = await this.expand(branch, content, []);
     return new Model(nodes);
   }
 
-  async expand(files: (MetadataNode | string)[], parentPath: string[]) {
+  async expand(branch: string, files: (MetadataNode | string)[], parentPath: string[]) {
     const map = new Map<number, TreeNode>();
     const futures = files.map((x, index) => {
       const { name, items } =
@@ -67,9 +67,10 @@ export default class API {
       const basename =
         typeof x === "string" ? `${name}.mdx` : `${name}/index.mdx`;
       const path = ["docs", ...parentPath, basename].join("/");
-      return this.getFileWithPath(path).then(({ title, content }) => {
+      return this.getFileWithPath(branch, path).then(({ title, content }) => {
         map.set(index, {
           name,
+          original_path: path,
           title,
           content,
           expanded: false,
@@ -91,20 +92,39 @@ export default class API {
     };
   }
 
-  async getFileWithPath(path: string) {
-    const res = await this.rest.repos.getContent({
-      ...base,
-      path,
-    });
-    if (!("type" in res.data && res.data.type === "file")) throw new Error();
-    return this.parseFile(res.data.content);
+  async dumpFile(title: string, content: string) {
+    const text = matter.stringify(content, { title });
+    const bin = new TextEncoder().encode(text);
+    const base64 = btoa(String.fromCharCode(...bin));
+    return base64;
   }
 
-  async getFileWithSHA(sha: string) {
-    const res = await this.rest.git.getBlob({
+  async getFileWithPath(branch: string, path: string) {
+    const { data } = await this.rest.repos.getContent({
       ...base,
-      file_sha: sha,
+      ref: branch,
+      path,
     });
-    return this.parseFile(res.data.content);
+    if (!("type" in data && data.type === "file")) throw new Error();
+    return this.parseFile(data.content);
+  }
+
+  async updateFileWithPath(branch: string, path: string, draft: Draft) {
+    const { data } = await this.rest.repos.getContent({
+      ...base,
+      ref: branch,
+      path,
+    });
+    if (!("type" in data && data.type === "file")) throw new Error();
+    const { title, content } = draft;
+    const base64 = await this.dumpFile(title, content);
+    await this.rest.repos.createOrUpdateFileContents({
+      ...base,
+      branch: this.user,
+      path,
+      message: `Update ${path}`,
+      content: base64,
+      sha: data.sha,
+    });
   }
 }

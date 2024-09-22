@@ -1,6 +1,17 @@
 import styled from "styled-components";
-import { apiAtom, modelAtom, pathAtom, sidebarAtom, TreeNode } from "../atoms";
+import {
+  apiAtom,
+  branchAtom,
+  draftAtom,
+  modelAtom,
+  pathAtom,
+  sidebarAtom,
+  TreeNode,
+} from "../atoms";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { Button, Modal } from "react-bootstrap";
+import { useState } from "react";
+import hash from "object-hash";
 
 const TreeList = styled.ul`
   padding: 0;
@@ -58,11 +69,13 @@ function SidebarItem({
   parent: string[];
   index: number;
 }) {
-  const api = useAtomValue(apiAtom);
+  const api = useAtomValue(apiAtom)!;
   const path = parent.concat([node.name]);
   const [currentPath, setPath] = useAtom(pathAtom);
+  const branch = useAtomValue(branchAtom);
+  const setDraft = useSetAtom(draftAtom);
   const [show, setShow] = useAtom(sidebarAtom);
-  const setModel = useSetAtom(modelAtom);
+  const [model, setModel] = useAtom(modelAtom);
   const hasChildren = node.items.length > 0 || node.unknown_items.length > 0;
   return (
     <li>
@@ -70,6 +83,13 @@ function SidebarItem({
         className={path.join("/") === currentPath.join("/") ? "active" : ""}
         onClick={() => {
           setPath(path);
+          const node = model.get(path)!;
+          const draftContent = {
+            name: node.name,
+            title: node.title,
+            content: node.content,
+          };
+          setDraft({ hash: hash(draftContent), ...draftContent });
           if (show) setShow(false);
         }}
       >
@@ -80,7 +100,7 @@ function SidebarItem({
               e.stopPropagation();
               const newNode = { ...node, expanded: !node.expanded };
               if (newNode.expanded && newNode.unknown_items.length > 0) {
-                newNode.items = await api.expand(newNode.unknown_items, path);
+                newNode.items = await api.expand(branch, newNode.unknown_items, path);
                 newNode.unknown_items = [];
               }
               setModel((draft) => draft.set(parent, index, newNode));
@@ -108,6 +128,9 @@ function SidebarItem({
 
 export default function Sidebar() {
   const model = useAtomValue(modelAtom);
+  const [show, setShow] = useState(false);
+
+  const handleClose = () => setShow(false);
 
   return (
     <aside style={{ width: "100%" }}>
@@ -123,6 +146,20 @@ export default function Sidebar() {
           ))}
         </TreeList>
       </nav>
+      <Modal show={show} onHide={handleClose}>
+        <Modal.Header closeButton>
+          <Modal.Title>Modal heading</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>Woohoo, you are reading this text in a modal!</Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleClose}>
+            Close
+          </Button>
+          <Button variant="primary" onClick={handleClose}>
+            Save Changes
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </aside>
   );
 }

@@ -3,13 +3,8 @@ import API from "./api";
 import { Buffer } from "buffer";
 import { atomWithImmer } from "jotai-immer";
 import { immerable } from "immer";
-import { atomWithStorage } from "jotai/utils";
 
 window.Buffer = window.Buffer || Buffer;
-
-export const tokenAtom = atomWithStorage("token", localStorage.getItem("token") ?? "");
-
-export const userAtom = atomWithStorage("user", localStorage.getItem("user") ?? "");
 
 export const mainBranch = "main";
 
@@ -26,11 +21,19 @@ export interface MetadataNode {
 
 export interface TreeNode {
   name: string;
+  original_path: string;
   title: string;
   content: string;
   expanded: boolean;
   unknown_items: (MetadataNode | string)[];
   items: TreeNode[];
+}
+
+export interface Draft {
+  name: string;
+  title: string;
+  content: string;
+  hash: string;
 }
 
 export class Model {
@@ -65,4 +68,13 @@ export class Model {
 
 export const modelAtom = atomWithImmer<Model>(new Model());
 
-export const apiAtom = atom((get) => new API(get(tokenAtom)));
+const makeAPI = () => {
+  const token = localStorage.getItem("token");
+  const user = localStorage.getItem("user");
+  if (token && user) return new API(token, user);
+  return null;
+};
+
+export const apiAtom = atom<API | null>(makeAPI());
+
+export const draftAtom = atom<Draft | null>(null);

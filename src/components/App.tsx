@@ -14,8 +14,6 @@ import {
   mainBranch,
   modelAtom,
   sidebarAtom,
-  tokenAtom,
-  userAtom,
 } from "../atoms";
 import Editor from "./Editor";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
@@ -23,7 +21,6 @@ import Sidebar from "./Sidebar";
 import styled from "styled-components";
 import Metadata from "./Metadata";
 import Login from "./Login";
-import { RESET } from "jotai/utils";
 
 const Wrapper = styled.div`
   flex: 1 0 200px;
@@ -72,8 +69,7 @@ function CMS() {
   const api = useAtomValue(apiAtom);
   const setModel = useSetAtom(modelAtom);
   const [show, setShow] = useAtom(sidebarAtom);
-  const [user, setUser] = useAtom(userAtom);
-  const setToken = useSetAtom(tokenAtom);
+  const user = localStorage.getItem("user") || "";
   const [hasUserBranch, setHasUserBranch] = useState(false);
   const [branchLoading, setBranchLoading] = useState(false);
   const [branch, setBranch] = useAtom(branchAtom);
@@ -82,14 +78,13 @@ function CMS() {
   const handleShow = () => setShow(true);
 
   useEffect(() => {
-    if (!api.ready) return;
-    api.initialize(branch).then((model) => {
-      setModel(model);
-    });
+    if (!api) return;
+    console.log("initialize");
+    api.initialize(branch).then(setModel);
   }, [setModel, api, branch]);
 
   useEffect(() => {
-    if (!api.ready) return;
+    if (!api) return;
     api.getBranches().then((branches) => {
       const hasUserBranch = branches.includes(user);
       setHasUserBranch(hasUserBranch);
@@ -97,7 +92,7 @@ function CMS() {
     });
   }, [user, api, setBranch]);
 
-  if (!api.ready) return <Spinner />;
+  if (!api) return <Spinner />;
 
   return (
     <>
@@ -145,8 +140,8 @@ function CMS() {
               </DropdownButton>
               <Button
                 onClick={() => {
-                  setUser(RESET);
-                  setToken(RESET);
+                  localStorage.removeItem("user");
+                  localStorage.removeItem("token");
                   window.location.reload();
                 }}
               >
@@ -178,8 +173,8 @@ function CMS() {
 }
 
 export default function App() {
-  const token = useAtomValue(tokenAtom);
-  const user = useAtomValue(userAtom);
+  const user = localStorage.getItem("user");
+  const token = localStorage.getItem("token");
   if (!token || !user) {
     return <Login />;
   }
