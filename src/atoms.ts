@@ -6,26 +6,17 @@ import { immerable } from "immer";
 
 window.Buffer = window.Buffer || Buffer;
 
-export const mainBranch = "main";
-
-export const branchAtom = atom(mainBranch);
-
-export const pathAtom = atom<string[]>([]);
-
-export const sidebarAtom = atom(false);
-
 export interface MetadataNode {
   name: string;
-  items: (MetadataNode | string)[];
+  items: MetadataNode[];
 }
 
 export interface TreeNode {
   name: string;
-  original_path: string;
   title: string;
   content: string;
   expanded: boolean;
-  unknown_items: (MetadataNode | string)[];
+  unknown_items: MetadataNode[];
   items: TreeNode[];
 }
 
@@ -45,7 +36,7 @@ export class Model {
   }
 
   get(path: string[]): TreeNode | undefined {
-    let node: TreeNode | undefined = undefined;
+    let node: TreeNode | undefined;
     let pointer: TreeNode[] = this.data;
     for (const name of path) {
       node = pointer.find((child) => child.name === name);
@@ -55,18 +46,20 @@ export class Model {
     return node;
   }
 
-  set(path: string[], index: number, node: TreeNode) {
+  set(path: string[], new_node: TreeNode) {
+    let node: TreeNode | undefined;
     let pointer: TreeNode[] = this.data;
-    for (const name of path) {
-      const child = pointer.find((child) => child.name === name);
-      if (!child) return;
-      pointer = child.items;
+    for (const name of path.slice(0, -1)) {
+      node = pointer.find((child) => child.name === name);
+      if (!node) return;
+      pointer = node.items;
     }
-    pointer[index] = node;
+    const name = path.at(-1);
+    const index = pointer.findIndex((child) => child.name === name);
+    if (index === -1) return;
+    pointer[index] = new_node;
   }
 }
-
-export const modelAtom = atomWithImmer<Model>(new Model());
 
 const makeAPI = () => {
   const token = localStorage.getItem("token");
@@ -75,6 +68,21 @@ const makeAPI = () => {
   return null;
 };
 
+export const mainBranch = "main";
+
+export const sidebarAtom = atom(false);
+
 export const apiAtom = atom<API | null>(makeAPI());
 
-export const draftAtom = atom<Draft | null>(null);
+export const branchAtom = atom(mainBranch);
+
+export const modelAtom = atomWithImmer<Model>(new Model());
+
+export const pathAtom = atom<string[]>([]);
+
+export const draftAtom = atom<Draft>({
+  name: "",
+  title: "",
+  content: "",
+  hash: "",
+});

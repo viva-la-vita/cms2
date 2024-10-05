@@ -9,7 +9,8 @@ import {
   TreeNode,
 } from "../atoms";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { Button, Modal } from "react-bootstrap";
+import Button from "react-bootstrap/Button";
+import Modal from "react-bootstrap/Modal";
 import { useState } from "react";
 import hash from "object-hash";
 
@@ -63,7 +64,6 @@ const ExpandButton = styled.button`
 function SidebarItem({
   node,
   parent,
-  index,
 }: {
   node: TreeNode;
   parent: string[];
@@ -100,10 +100,14 @@ function SidebarItem({
               e.stopPropagation();
               const newNode = { ...node, expanded: !node.expanded };
               if (newNode.expanded && newNode.unknown_items.length > 0) {
-                newNode.items = await api.expand(branch, newNode.unknown_items, path);
+                newNode.items = await api.expand(
+                  branch,
+                  newNode.unknown_items,
+                  path
+                );
                 newNode.unknown_items = [];
               }
-              setModel((draft) => draft.set(parent, index, newNode));
+              setModel((draft) => draft.set(path, newNode));
             }}
           >
             {node.expanded ? <span>&minus;</span> : <span>+</span>}
@@ -126,6 +130,10 @@ function SidebarItem({
   );
 }
 
+const Aside = styled.aside`
+  width: 100%;
+`;
+
 export default function Sidebar() {
   const model = useAtomValue(modelAtom);
   const [show, setShow] = useState(false);
@@ -133,7 +141,7 @@ export default function Sidebar() {
   const handleClose = () => setShow(false);
 
   return (
-    <aside style={{ width: "100%" }}>
+    <Aside>
       <nav>
         <TreeList>
           {model.data.map((node, index) => (
@@ -160,6 +168,6 @@ export default function Sidebar() {
           </Button>
         </Modal.Footer>
       </Modal>
-    </aside>
+    </Aside>
   );
 }

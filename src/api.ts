@@ -27,6 +27,24 @@ export default class API {
     this.rest = this.octokit.rest;
   }
 
+  async getPullRequests() {
+    const { data } = await this.rest.pulls.list({
+      ...base,
+      state: "open",
+    });
+    return data;
+  }
+
+  async createPullRequest(branch: string) {
+    const { data } = await this.rest.pulls.create({
+      ...base,
+      title: `Update ${branch}`,
+      head: branch,
+      base: mainBranch,
+    });
+    return data;
+  }
+
   async getBranches() {
     const { data } = await this.rest.repos.listBranches({
       ...base,
@@ -59,24 +77,19 @@ export default class API {
     return new Model(nodes);
   }
 
-  async expand(branch: string, files: (MetadataNode | string)[], parentPath: string[]) {
+  async expand(branch: string, files: MetadataNode[], parentPath: string[]) {
     const map = new Map<number, TreeNode>();
-    const futures = files.map((x, index) => {
-      const { name, items } =
-        typeof x === "string" ? { name: x, items: [] } : x;
-      const basename =
-        typeof x === "string" ? `${name}.mdx` : `${name}/index.mdx`;
+    const futures = files.map(async ({ name, items }, index) => {
+      const basename = `${name}/index.mdx`;
       const path = ["docs", ...parentPath, basename].join("/");
-      return this.getFileWithPath(branch, path).then(({ title, content }) => {
-        map.set(index, {
-          name,
-          original_path: path,
-          title,
-          content,
-          expanded: false,
-          unknown_items: items,
-          items: [],
-        });
+      const { title, content } = await this.getFileWithPath(branch, path);
+      map.set(index, {
+        name,
+        title,
+        content,
+        expanded: false,
+        unknown_items: items,
+        items: [],
       });
     });
     await Promise.all(futures);
@@ -109,22 +122,36 @@ export default class API {
     return this.parseFile(data.content);
   }
 
-  async updateFileWithPath(branch: string, path: string, draft: Draft) {
+  async updateFileWithPath(path: string[], draft: Draft) {
+    const original_path = ["docs", ...path, "index.mdx"].join("/");
     const { data } = await this.rest.repos.getContent({
       ...base,
-      ref: branch,
-      path,
+      ref: this.user,
+      path: original_path,
     });
     if (!("type" in data && data.type === "file")) throw new Error();
-    const { title, content } = draft;
+    const { name, title, content } = draft;
     const base64 = await this.dumpFile(title, content);
+    const new_path = [...path];
+    if (name !== path.at(-1)) {
+      await this.rest.repos.deleteFile({
+        ...base,
+        branch: this.user,
+        path: original_path,
+        message: `Delete ${original_path}`,
+        sha: data.sha,
+      });
+      new_path[new_path.length - 1] = name;
+    }
+    const new_original_path = ["docs", ...new_path, "index.mdx"].join("/");
     await this.rest.repos.createOrUpdateFileContents({
       ...base,
       branch: this.user,
-      path,
-      message: `Update ${path}`,
+      path: new_original_path,
+      message: `Update ${new_original_path}`,
       content: base64,
       sha: data.sha,
     });
+    return new_path;
   }
 }

@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
-import {
-  Button,
-  Container,
-  Dropdown,
-  DropdownButton,
-  Navbar,
-  Offcanvas,
-  Spinner,
-} from "react-bootstrap";
+import Button from "react-bootstrap/Button";
+import Container from "react-bootstrap/Container";
+import Dropdown from "react-bootstrap/Dropdown";
+import DropdownButton from "react-bootstrap/DropdownButton";
+import Navbar from "react-bootstrap/Navbar";
+import Offcanvas from "react-bootstrap/Offcanvas";
+import Spinner from "react-bootstrap/Spinner";
 import {
   apiAtom,
   branchAtom,
@@ -36,6 +34,7 @@ const Header = styled.header`
   top: 0;
   background-color: white;
   z-index: 1;
+  border-bottom: 1px solid #e0e0e0;
 `;
 
 const Footer = styled.footer`
@@ -73,24 +72,27 @@ function CMS() {
   const [hasUserBranch, setHasUserBranch] = useState(false);
   const [branchLoading, setBranchLoading] = useState(false);
   const [branch, setBranch] = useAtom(branchAtom);
+  const [hasPullRequest, setHasPullRequest] = useState(false);
 
   const handleClose = () => setShow(false);
   const handleShow = () => setShow(true);
 
   useEffect(() => {
     if (!api) return;
-    console.log("initialize");
     api.initialize(branch).then(setModel);
-  }, [setModel, api, branch]);
+  }, [api, branch, setModel]);
 
   useEffect(() => {
     if (!api) return;
     api.getBranches().then((branches) => {
       const hasUserBranch = branches.includes(user);
       setHasUserBranch(hasUserBranch);
-      if (hasUserBranch) setBranch(user);
     });
-  }, [user, api, setBranch]);
+    api.getPullRequests().then((prs) => {
+      const hasPullRequest = prs.some((x) => x.head.ref === user);
+      setHasPullRequest(hasPullRequest);
+    });
+  }, [api, user]);
 
   if (!api) return <Spinner />;
 
@@ -113,9 +115,18 @@ function CMS() {
               className="justify-content-end"
               style={{ gap: 16 }}
             >
-              <DropdownButton
-                title={`版本：${branch === mainBranch ? "主线" : "分支"}`}
+              <Button
+                variant={hasPullRequest ? "text" : "primary"}
+                disabled={hasPullRequest}
+                onClick={() => {
+                  api.createPullRequest(branch).then(() => {
+                    setHasPullRequest(true);
+                  });
+                }}
               >
+                {hasPullRequest ? "已提交" : "提交"}
+              </Button>
+              <DropdownButton title={branch === mainBranch ? "主线" : "分支"}>
                 <Dropdown.Item onClick={() => setBranch(mainBranch)}>
                   主线
                 </Dropdown.Item>

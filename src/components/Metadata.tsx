@@ -1,20 +1,68 @@
 import { useAtom, useAtomValue } from "jotai";
-import { Button, Col, Form, InputGroup, Row, Spinner } from "react-bootstrap";
-import { apiAtom, branchAtom, draftAtom, modelAtom, pathAtom } from "../atoms";
+import Button from "react-bootstrap/Button";
+import Col from "react-bootstrap/Col";
+import Form from "react-bootstrap/Form";
+import InputGroup from "react-bootstrap/InputGroup";
+import Row from "react-bootstrap/Row";
+import Spinner from "react-bootstrap/Spinner";
+import { apiAtom, draftAtom, modelAtom, pathAtom } from "../atoms";
 import hashfunc from "object-hash";
 import { useState } from "react";
 
-export default function Metadata() {
+function Actions() {
   const api = useAtomValue(apiAtom)!;
-  const path = useAtomValue(pathAtom);
-  const model = useAtomValue(modelAtom);
+  const [path, setPath] = useAtom(pathAtom);
+  const [model, setModel] = useAtom(modelAtom);
   const [draft, setDraft] = useAtom(draftAtom);
-  const branch = useAtomValue(branchAtom);
-
   const [loading, setLoading] = useState(false);
   if (!draft) return null;
   const { hash, ...rest } = draft;
   const match = hashfunc(rest) === hash;
+  const node = model.get(path)!;
+  return (
+    <>
+      <Button
+        disabled={match}
+        onClick={() => {
+          setDraft((draft) => ({
+            ...draft,
+            name: node.name,
+            title: node.title,
+            content: node.content,
+          }));
+        }}
+      >
+        重置
+      </Button>
+      <Button
+        disabled={match}
+        onClick={async () => {
+          setLoading(true);
+          const new_path = await api.updateFileWithPath(path, draft);
+          setLoading(false);
+          // 远程更新成功之后，更新本地状态
+          // 如果路径发生变化，更新路径
+          if (new_path.some((x, i) => x !== path[i])) {
+            setPath(new_path);
+          }
+          // 更新节点数据
+          setModel((model) => {
+            model.set(path, { ...node, ...rest });
+          });
+          // 更新草稿
+          setDraft({ ...draft, hash: hashfunc(rest) });
+        }}
+      >
+        {loading ? <Spinner size="sm" /> : "保存"}
+      </Button>
+    </>
+  );
+}
+
+export default function Metadata() {
+  const path = useAtomValue(pathAtom);
+  const [draft, setDraft] = useAtom(draftAtom);
+  if (path.length === 0) return null;
 
   const hint = [""].concat(path.slice(0, path.length - 1)).join("/") + "/";
   return (
@@ -24,32 +72,7 @@ export default function Metadata() {
         lg={2}
         style={{ display: "flex", justifyContent: "center", gap: "1rem" }}
       >
-        <Button
-          disabled={match}
-          onClick={() => {
-            const node = model.get(path)!;
-            const draftContent = {
-              name: node.name,
-              title: node.title,
-              content: node.content,
-            };
-            setDraft({ ...draft, ...draftContent });
-          }}
-        >
-          重置
-        </Button>
-        <Button
-          disabled={match}
-          onClick={() => {
-            const node = model.get(path)!;
-            setLoading(true);
-            api
-              .updateFileWithPath(branch, node.original_path, draft)
-              .then(() => setLoading(false));
-          }}
-        >
-          {loading ? <Spinner size="sm"/> : "保存"}
-        </Button>
+        <Actions />
       </Col>
       <Col xs={12} md={6} lg={5}>
         <Form.Group as={Row}>
@@ -77,6 +100,7 @@ export default function Metadata() {
               <Form.Control
                 type="text"
                 placeholder="只能使用小写字母 (a-z) 或连字符 (-)"
+                disabled
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               />

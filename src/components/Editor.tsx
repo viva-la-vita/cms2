@@ -3,22 +3,13 @@ import "vditor/dist/index.css";
 
 import { useEffect, useRef, useState } from "react";
 import { useAtom, useAtomValue } from "jotai";
-import {
-  branchAtom,
-  draftAtom,
-  mainBranch,
-  modelAtom,
-  pathAtom,
-} from "../atoms";
+import { branchAtom, draftAtom, mainBranch } from "../atoms";
 
 export default function Editor() {
   const [vd, setVd] = useState<Vditor>();
   const branch = useAtomValue(branchAtom);
-  const model = useAtomValue(modelAtom);
-  const path = useAtomValue(pathAtom);
   const [draft, setDraft] = useAtom(draftAtom);
   const editorRef = useRef<HTMLDivElement>(null);
-
   const deduction = 240;
 
   useEffect(() => {
@@ -34,19 +25,18 @@ export default function Editor() {
         );
       }
     });
+  }, []);
+
+  useEffect(() => {
     const useOutline = document.body.clientWidth > 992;
-    if (!editorRef.current) return;
-    const welcomeText =
-      "欢迎使用生如夏花内容管理系统。\n\n您可以在目录中选择一个文档进行编辑。点击 ` + ` 展开子目录，点击 ` \u2212 ` 折叠子目录。";
-    const vditor = new Vditor(editorRef.current, {
+    const vditor = new Vditor("vditor", {
       after: () => {
-        vditor.setValue(welcomeText);
-        setVd(vditor);
+        vditor.setValue(
+          "欢迎使用生如夏花内容管理系统。\n\n您可以在目录中选择一个文档进行编辑。点击 ` + ` 展开子目录，点击 ` \u2212 ` 折叠子目录。"
+        );
       },
       input: (content) => {
-        if (!draft) return;
-        console.log(content);
-        setDraft({ ...draft, content });
+        setDraft((draft) => ({ ...draft, content }));
       },
       toolbar: [
         "headings",
@@ -87,21 +77,30 @@ export default function Editor() {
     });
     setVd(vditor);
     return () => {
-      vd?.destroy();
+      vditor.destroy();
       setVd(undefined);
     };
-  }, []);
+  }, [setDraft]);
 
   useEffect(() => {
-    const node = model.get(path);
-    if (!node) return;
-    vd?.setValue(node.content);
-    if (branch === mainBranch) {
-      vd?.disabled();
-    } else {
-      vd?.enable();
+    try {
+      if (branch === mainBranch) {
+        vd?.disabled();
+      } else {
+        vd?.enable();
+      }
+    } catch (error) {
+      console.log(error);
     }
-  }, [model, path, vd, branch]);
+  }, [vd, branch]);
 
-  return <div ref={editorRef} />;
+  useEffect(() => {
+    try {
+      if (vd && draft.content !== vd.getValue()) vd.setValue(draft.content);
+    } catch (error) {
+      console.log(error);
+    }
+  }, [vd, draft]);
+
+  return <div ref={editorRef} id="vditor" className="vditor" />;
 }
